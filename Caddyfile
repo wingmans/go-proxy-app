@@ -1,0 +1,40 @@
+{
+	order rate_limit before forward_proxy
+}
+
+:8080 {
+	@healthz path /healthz
+	respond @healthz 200
+
+	rate_limit {
+		zone sec_gov {
+			match {
+				host *.sec.gov
+			}
+			key {http.request.host}
+			events 10
+			window 1s
+		}
+		zone yahoo_com {
+			match {
+				host *.yahoo.com
+			}
+			key {http.request.host}
+			events 2
+			window 1s
+		}
+		# Unlisted domains pass straight through without rate limiting
+	}
+
+	forward_proxy {
+		hide_ip
+		hide_via
+		probe_resistance
+		basic_auth {$PROXY_USER} $${PROXY_HASH}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
