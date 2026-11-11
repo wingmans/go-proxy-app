@@ -1,0 +1,20 @@
+name: authorization
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # Keep the credential-bearing proxy local unless you add client auth.
+      - "127.0.0.1:${AUTH_PROXY_PORT:-8091}:8080"
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:?Set API_UPSTREAM in .env}
+      API_AUTH_HEADER: ${API_AUTH_HEADER:?Set API_AUTH_HEADER in .env}
+      API_AUTH_VALUE: ${API_AUTH_VALUE:?Set API_AUTH_VALUE in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 5

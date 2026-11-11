@@ -1,0 +1,22 @@
+services:
+  caddy:
+    depends_on:
+      mock-api:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: http://mock-api:8080
+      API_AUTH_HEADER: X-Demo-Api-Key
+      API_AUTH_VALUE: test-secret
+
+  mock-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-api
+    environment:
+      EXPECTED_AUTH_HEADER: X-Demo-Api-Key
+      EXPECTED_AUTH_VALUE: test-secret
+    healthcheck:
+      test: ["CMD", "/mock-api", "healthcheck"]
+      interval: 2s
+      timeout: 1s
+      retries: 10

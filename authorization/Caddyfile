@@ -1,0 +1,30 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	@health path /healthz
+	handle @health {
+		respond "ok" 200
+	}
+
+	handle {
+		reverse_proxy {$API_UPSTREAM} {
+			# Do not forward credentials supplied by the caller. The configured
+			# API credential is always the one sent to the upstream service.
+			header_up -Authorization
+			header_up -Proxy-Authorization
+			header_up -Cookie
+			header_up {$API_AUTH_HEADER} "{$API_AUTH_VALUE}"
+
+			# Public HTTPS APIs usually require their own hostname in Host/SNI.
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
