@@ -15,27 +15,18 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	proxyURL, err := url.Parse(envOrDefault("PROXY_URL", "http://127.0.0.1:8090"))
+	gatewayURL, err := url.Parse(envOrDefault(
+		"GATEWAY_URL", "http://127.0.0.1:8090",
+	))
 	if err != nil {
-		jsonLogger.Error("invalid proxy URL", slog.String("error", err.Error()))
+		jsonLogger.Error("invalid gateway URL", slog.String("error", err.Error()))
 		os.Exit(1)
-	}
-
-	proxyUser := os.Getenv("PROXY_USER")
-	proxyPass := os.Getenv("PROXY_PASS")
-	if proxyUser != "" || proxyPass != "" {
-		if proxyUser == "" || proxyPass == "" {
-			jsonLogger.Error("both PROXY_USER and PROXY_PASS must be set")
-			os.Exit(1)
-		}
-
-		proxyURL.User = url.UserPassword(proxyUser, proxyPass)
 	}
 
 	client := &http.Client{
 		Transport: &RateLimitRetryTransport{
-			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
+			Transport: &GatewayTransport{
+				GatewayURL: gatewayURL, Transport: http.DefaultTransport,
 			},
 			MaxRetries: 3,
 			BaseDelay:  250 * time.Millisecond,
@@ -47,7 +38,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	targetURL := envOrDefault("TARGET_URL", "http://www.yahoo.com")
+	targetURL := envOrDefault("TARGET_URL", "https://example.com")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
 		jsonLogger.Error("invalid target URL", slog.String("error", err.Error()))

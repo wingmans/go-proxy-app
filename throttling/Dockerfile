@@ -1,11 +1,8 @@
-# Phase 1: Build the custom Caddy binary with plugins
-FROM caddy:builder AS builder
+FROM caddy:2.11.9-builder-alpine AS builder
 
 RUN xcaddy build \
-    --with github.com/mholt/caddy-ratelimit \
-    --with github.com/caddyserver/forwardproxy
+    --with github.com/mholt/caddy-ratelimit@5625512f24f6f59d6f64fb3aafe5eecff0b286db
 
-# Phase 2: Create the lean production runtime image
-FROM caddy:latest
+FROM caddy:2.11.9-alpine
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy

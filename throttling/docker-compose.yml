@@ -1,18 +1,19 @@
 services:
   caddy:
+    image: ${PROXY_IMAGE:-go-proxy-app-throttling:0.1.0}
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8090:8080"
-    environment:
-      - PROXY_USER=${PROXY_USER}
-      - PROXY_HASH=${PROXY_HASH}
+      - "127.0.0.1:${PROXY_PORT:-8090}:8080"
+    labels:
+      app.proxy.policy-sha256: ${POLICY_HASH:-unconfigured}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDYFILE_PATH:-./.generated/Caddyfile}:/etc/caddy/Caddyfile:ro
     healthcheck:
-      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 5s

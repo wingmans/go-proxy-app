@@ -1,61 +1,128 @@
-.PHONY: help build up down logs validate test run-curl run-go test-go clean
+.PHONY: help build configure up down status logs validate test run-curl \
+	run-go test-go test-generator clean require-rules
 
-ENV_FILE := .env
+ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+RULES_FILE ?=
+CONFIG_NAME ?= default
+GENERATED_DIR := $(ROOT_DIR)/.generated
+CADDYFILE := $(GENERATED_DIR)/$(CONFIG_NAME).Caddyfile
+PROXY_IMAGE ?= go-proxy-app-throttling:0.1.0
+PROXY_PORT ?= 8090
+TEST_PORT ?= 18090
+TEST_PROJECT ?= go-proxy-app-throttling-test
+TEST_RULES_FILE := $(ROOT_DIR)/policies/test.rules
 
 help:
-	@echo "Available commands:"
-	@echo "  make build   	- Build or rebuild ONLY the Caddy proxy container"
-	@echo "  make up      	- Auto-generate credentials if missing and start stack"
-	@echo "  make down    	- Stop containers"
-	@echo "  make logs    	- Stream unified JSON logs"
-	@echo "  make validate - Build Caddy and validate its configuration"
-	@echo "  make run-curl  - Run the proxy rate-limit smoke test"
-	@echo "  make run-go  	- Run the Go client through the proxy"
-	@echo "  make test-go 	- Run the Go retry-transport unit tests"
-	@echo "  make clean   	- Stop containers and prune local artifacts"
+	@printf '%s\n' \
+		'Throttling gateway commands:' \
+		'' \
+		'  make build                 Build the versioned local image' \
+		'  make up RULES_FILE=<path>  Generate policy and start the gateway' \
+		'  make down                  Stop the gateway' \
+		'  make status                Show container status' \
+		'  make logs                  Follow gateway logs' \
+		'  make validate RULES_FILE=<path>' \
+		'                             Validate generated Caddy configuration' \
+		'  make test                  Run generator and gateway tests' \
+		'  make run-go RULES_FILE=<path>' \
+		'                             Run the retry-client example' \
+		'  make clean                 Stop containers and generated files'
 
 build:
-	docker compose build caddy
+	PROXY_IMAGE="$(PROXY_IMAGE)" docker compose build caddy
 
-$(ENV_FILE):
-	@echo "Generating fresh proxy credentials..."
-	@USER_NAME="$${PROXY_USER:-my-custom-user}"; \
-	PASS="$$(openssl rand -base64 16)"; \
-	RAW_HASH="$$(docker run --rm caddy:latest caddy hash-password --plaintext "$$PASS")"; \
-	printf "PROXY_USER=%s\nPROXY_PASS=%s\nPROXY_HASH=%s\nIE6=\n" "$$USER_NAME" "$$PASS" "$$RAW_HASH" > $(ENV_FILE)
+require-rules:
+	@test -n "$(RULES_FILE)" || { \
+		echo 'RULES_FILE is required' >&2; exit 1; \
+	}
+	@test -f "$(RULES_FILE)" || { \
+		echo 'RULES_FILE does not exist: $(RULES_FILE)' >&2; exit 1; \
+	}
 
-up: $(ENV_FILE)
-	docker compose up -d --wait
+configure: require-rules
+	@mkdir -p "$(GENERATED_DIR)"
+	cd cmd/generate && go run . \
+		-rules "$(abspath $(RULES_FILE))" -out "$(CADDYFILE)"
+
+up: configure
+	@POLICY_HASH="$$(shasum -a 256 "$(RULES_FILE)" | awk '{print $$1}')"; \
+	CADDYFILE_PATH="$(CADDYFILE)" \
+	POLICY_HASH="$$POLICY_HASH" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose up -d --wait caddy
 
 down:
-	docker compose down
+	@CADDYFILE_PATH="$(CADDYFILE)" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose down
+
+status:
+	@CADDYFILE_PATH="$(CADDYFILE)" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose ps
 
 logs:
-	@if [ -f ./tail-logs.sh ]; then \
-		./tail-logs.sh; \
-	else \
-		docker compose logs -f; \
-	fi
+	@CADDYFILE_PATH="$(CADDYFILE)" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose logs -f caddy
 
-validate: $(ENV_FILE) build
-	docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile
+validate: configure build
+	@CADDYFILE_PATH="$(CADDYFILE)" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose run --rm --no-deps caddy \
+		caddy validate --config /etc/caddy/Caddyfile
 
-run-curl: up
-	@./test_curl.sh
-
-test: run-curl
-
-run-go: up
-	@cd cmd/app && \
-		PROXY_USER="$$(sed -n 's/^PROXY_USER=//p' ../../.env)" \
-		PROXY_PASS="$$(sed -n 's/^PROXY_PASS=//p' ../../.env)" \
-		PROXY_URL="http://127.0.0.1:8090" \
-		TARGET_URL="$${TARGET_URL:-http://www.yahoo.com}" \
-		go run .
+test-generator:
+	cd cmd/generate && go test ./...
 
 test-go:
 	cd cmd/app && go test ./...
 
+run-curl:
+	@set -eu; \
+	cleanup() { \
+		$(MAKE) --no-print-directory down \
+			CONFIG_NAME=test PROXY_PORT="$(TEST_PORT)" \
+			PROXY_IMAGE="$(PROXY_IMAGE)" \
+			COMPOSE_PROJECT_NAME="$(TEST_PROJECT)" >/dev/null; \
+	}; \
+	trap cleanup EXIT INT TERM; \
+	$(MAKE) --no-print-directory up \
+		RULES_FILE="$(TEST_RULES_FILE)" CONFIG_NAME=test \
+		PROXY_PORT="$(TEST_PORT)" PROXY_IMAGE="$(PROXY_IMAGE)" \
+		COMPOSE_PROJECT_NAME="$(TEST_PROJECT)"; \
+	published="$$(CADDYFILE_PATH="$(GENERATED_DIR)/test.Caddyfile" \
+		PROXY_PORT="$(TEST_PORT)" PROXY_IMAGE="$(PROXY_IMAGE)" \
+		COMPOSE_PROJECT_NAME="$(TEST_PROJECT)" \
+		docker compose port caddy 8080)"; \
+	case "$$published" in \
+		127.0.0.1:*) ;; \
+		*) echo "gateway is not loopback-only: $$published" >&2; exit 1 ;; \
+	esac; \
+	PROXY_URL="http://127.0.0.1:$(TEST_PORT)" ./test_curl.sh; \
+	cleanup; \
+	trap - EXIT INT TERM; \
+	if curl --silent --max-time 1 \
+		"http://127.0.0.1:$(TEST_PORT)/healthz" >/dev/null 2>&1; then \
+		echo 'gateway remained reachable after shutdown' >&2; exit 1; \
+	fi
+
+test: test-generator test-go run-curl
+
+run-go: up
+	@cd cmd/app && \
+		GATEWAY_URL="http://127.0.0.1:$(PROXY_PORT)" \
+		TARGET_URL="$${TARGET_URL:-https://example.com}" \
+		go run .
+
 clean:
-	docker compose down --rmi local --volumes --remove-orphans
-	rm -f .env
+	@CADDYFILE_PATH="$(CADDYFILE)" \
+	PROXY_IMAGE="$(PROXY_IMAGE)" \
+	PROXY_PORT="$(PROXY_PORT)" \
+		docker compose down --remove-orphans
+	rm -rf "$(GENERATED_DIR)"

@@ -1,0 +1,2 @@
+# The apex and wildcard intentionally share one two-request window.
+example 2r/s example.com *.example.com
