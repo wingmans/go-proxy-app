@@ -21,6 +21,8 @@ market 30r/m query.example.com
 
 	generated := generateCaddyfile(rules)
 	for _, expected := range []string{
+		"basic_auth", "{$PROXY_USER:test-proxy-user}",
+		"request_header -Authorization",
 		"zone sec", "host sec.gov *.sec.gov", "key sec", "events 8",
 		"window 1s", "@allowed host sec.gov *.sec.gov query.example.com",
 		"reverse_proxy @allowed {host}:443", "tls_server_name {host}",

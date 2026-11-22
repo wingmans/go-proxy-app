@@ -163,6 +163,10 @@ func generateCaddyfile(rules []rule) string {
 	output.WriteString("{\n\tadmin off\n}\n\n:8080 {\n\troute {\n")
 	output.WriteString("\t\t@healthz path /healthz\n")
 	output.WriteString("\t\trespond @healthz 200\n\n")
+	output.WriteString("\t\tbasic_auth {\n")
+	output.WriteString("\t\t\t{$PROXY_USER:test-proxy-user} {$PROXY_HASH:$2a$14$D8kc7DkE2otVllA4EM0s0eQ2SvXy46nRCdkbjbCRnbDxxrQrT1nE2}\n")
+	output.WriteString("\t\t}\n\n")
+	output.WriteString("\t\trequest_header -Authorization\n\n")
 	output.WriteString("\t\trate_limit {\n")
 	for _, rule := range rules {
 		fmt.Fprintf(&output, "\t\t\tzone %s {\n", rule.bucket)

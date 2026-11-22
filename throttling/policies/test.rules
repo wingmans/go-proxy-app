@@ -1,2 +1,3 @@
-# The apex and wildcard intentionally share one two-request window.
-example 2r/s example.com *.example.com
+# Apex and wildcard hosts share their bucket's request window.
+sec    3r/s sec.gov *.sec.gov
+yahoo  5r/s yahoo.com *.yahoo.com

@@ -2,7 +2,7 @@
 	run-go test-go test-generator clean require-rules
 
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-RULES_FILE ?=
+RULES_FILE ?= $(ROOT_DIR)/policies/example.rules
 CONFIG_NAME ?= default
 GENERATED_DIR := $(ROOT_DIR)/.generated
 CADDYFILE := $(GENERATED_DIR)/$(CONFIG_NAME).Caddyfile
@@ -17,13 +17,16 @@ help:
 		'Throttling gateway commands:' \
 		'' \
 		'  make build                 Build the versioned local image' \
-		'  make up RULES_FILE=<path>  Generate policy and start the gateway' \
+		'  make up                   Start with policies/example.rules' \
+		'  make up RULES_FILE=<path> Override the default policy' \
 		'  make down                  Stop the gateway' \
 		'  make status                Show container status' \
 		'  make logs                  Follow gateway logs' \
+		'  make validate             Validate the default policy' \
 		'  make validate RULES_FILE=<path>' \
 		'                             Validate generated Caddy configuration' \
 		'  make test                  Run generator and gateway tests' \
+		'  make run-go               Run with the default policy' \
 		'  make run-go RULES_FILE=<path>' \
 		'                             Run the retry-client example' \
 		'  make clean                 Stop containers and generated files'

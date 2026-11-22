@@ -47,7 +47,11 @@ Build the pinned, versioned local image:
 
     make build
 
-Start the gateway with a policy:
+Start the gateway with the default `policies/example.rules` policy:
+
+    make up
+
+Override the policy when needed:
 
     make up RULES_FILE=policies/example.rules
 
@@ -61,8 +65,12 @@ Inspect or stop it with:
     make logs
     make down
 
-Validate a generated configuration without starting the long-running
+Validate the default generated configuration without starting the long-running
 container:
+
+    make validate
+
+Or validate a different policy:
 
     make validate RULES_FILE=policies/example.rules
 
