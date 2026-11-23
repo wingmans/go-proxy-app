@@ -1,7 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-PROXY_URL="${PROXY_URL:-http://127.0.0.1:8090}"
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
+PROXY_PORT="${PROXY_PORT:-8090}"
+PROXY_URL="${PROXY_URL:-http://127.0.0.1:$PROXY_PORT}"
 PROXY_USER="${PROXY_USER:-test-proxy-user}"
 PROXY_PASS="${PROXY_PASS:-test-proxy-password}"
 

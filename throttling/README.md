@@ -49,7 +49,12 @@ Build the pinned, versioned local image:
 
 Start the gateway with the default `policies/example.rules` policy:
 
+    cp .env.example .env
     make up
+
+Docker Compose and `test_curl.sh` both load `.env`. The checked-in example
+contains public local-test credentials. Edit `.env` to change the credentials
+or port without changing the Makefile or scripts.
 
 Override the policy when needed:
 

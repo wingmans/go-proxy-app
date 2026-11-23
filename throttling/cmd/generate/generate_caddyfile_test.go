@@ -21,6 +21,7 @@ market 30r/m query.example.com
 
 	generated := generateCaddyfile(rules)
 	for _, expected := range []string{
+		"log_skip @healthz",
 		"basic_auth", "{$PROXY_USER:test-proxy-user}",
 		"request_header -Authorization",
 		"zone sec", "host sec.gov *.sec.gov", "key sec", "events 8",

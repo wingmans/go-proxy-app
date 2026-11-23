@@ -13,8 +13,15 @@ credential.
    make create
    ```
 
-2. Set the public API origin and credential in `.env`. `API_UPSTREAM` must be
-   an origin such as `https://api.github.com`, without a path.
+   When `.env` is missing, Make copies the working local values from
+   `.env.sample`. The sample starts the included mock API automatically and
+   authenticates upstream as `test-user:test-password` using HTTP Basic.
+   Callers authenticate separately as
+   `test-proxy-user:test-proxy-password`; only the caller password hash enters
+   the Caddy container.
+
+2. To target another API, edit `.env`. `API_UPSTREAM` must be an origin such as
+   `https://api.github.com`, without a path.
 
 3. Start the proxy. Running `make up` directly also creates `.env` when it is
    missing:
@@ -41,28 +48,31 @@ The proxy strips caller-provided `Authorization`, `Proxy-Authorization`, and
 `Cookie` headers before adding the configured credential. Access logs do not
 record request headers.
 
-## Self-contained test
+## Curl validation
 
-The integration test uses the normal Caddy proxy and `Caddyfile`. It adds a
-private Go validation service as the upstream, then calls the published proxy
-from the host. The validator returns success only when Caddy injected the
-expected credential and stripped caller credentials.
+`test.sh` assumes the authorization proxy and its upstream are already running.
+It does not start, stop, or remove containers. The script reads its settings
+from `.env`, calls
+the health endpoint, and then sends an explicit curl request containing caller
+credentials that must be replaced by the configured upstream credential.
 
-Run both the curl and Go clients:
-
-```sh
-make test
-```
-
-Or run either host client independently:
+Start the complete sample stack:
 
 ```sh
-make run-curl
-make run-go
+make up
 ```
 
-The test stack uses port `18091`, so it does not conflict with the normal
-proxy on port `8091`. It is removed automatically when the test finishes.
+Run the curl script:
+
+```sh
+./test.sh
+```
+
+Stop the stack explicitly when finished:
+
+```sh
+make down
+```
 
 ## Security boundary
 
