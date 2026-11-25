@@ -60,8 +60,9 @@ Override the policy when needed:
 
     make up RULES_FILE=policies/example.rules
 
-`make up` generates the Caddy configuration, builds the image if necessary,
-and waits for the running gateway healthcheck. Repeating the command is safe.
+`make up` regenerates the checked-in `Caddyfile` from the selected policy,
+builds the image if necessary, and waits for the running gateway healthcheck.
+Repeating the command is safe.
 Changing the policy recreates the container but does not rebuild the image.
 
 Inspect or stop it with:
@@ -96,6 +97,13 @@ against a host allowed by the selected policy:
 
     make run-go RULES_FILE=policies/example.rules
 
+For a gateway-generated `429`, the rate limiter adds up to 10% jitter to the
+wait until the next slot opens. It sends the same delay rounded up in
+`Retry-After-Ms` (milliseconds) and `Retry-After` (seconds). The Go client
+prefers the millisecond header, then standard `Retry-After`, then exponential
+backoff with client-side jitter. The gateway strips `Retry-After-Ms` from
+upstream responses.
+
 If the gateway is stopped, the client receives a connection error. The client
 must never fall back to its original external destination.
 
@@ -123,8 +131,9 @@ catch-all rules.
 
 ## Versioning
 
-The Dockerfile pins Caddy and the rate-limit module. The default local image is
-named `go-proxy-app-throttling:0.1.0`; override `PROXY_IMAGE` when needed.
+The Dockerfile pins Caddy and builds the rate-limit module with the local
+`retry-after-ms.patch`. The default local image is
+`go-proxy-app-throttling:0.2.0`. Set `PROXY_IMAGE` to use a different tag.
 
 Publishing the image to a registry is optional. A source clone plus
 `make build` provides the same runtime behavior and is the normal workflow.

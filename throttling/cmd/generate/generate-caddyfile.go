@@ -169,6 +169,7 @@ func generateCaddyfile(rules []rule) string {
 	output.WriteString("\t\t}\n\n")
 	output.WriteString("\t\trequest_header -Authorization\n\n")
 	output.WriteString("\t\trate_limit {\n")
+	output.WriteString("\t\t\tjitter 0.1\n")
 	for _, rule := range rules {
 		fmt.Fprintf(&output, "\t\t\tzone %s {\n", rule.bucket)
 		output.WriteString("\t\t\t\tmatch {\n")
@@ -191,6 +192,7 @@ func generateCaddyfile(rules []rule) string {
 	output.WriteString("\n")
 	output.WriteString("\t\treverse_proxy @allowed {host}:443 {\n")
 	output.WriteString("\t\t\theader_up Host {host}\n")
+	output.WriteString("\t\t\theader_down -Retry-After-Ms\n")
 	output.WriteString("\t\t\ttransport http {\n")
 	output.WriteString("\t\t\t\tnetwork_proxy none\n")
 	output.WriteString("\t\t\t\ttls\n")

@@ -24,10 +24,10 @@ market 30r/m query.example.com
 		"log_skip @healthz",
 		"basic_auth", "{$PROXY_USER:test-proxy-user}",
 		"request_header -Authorization",
-		"zone sec", "host sec.gov *.sec.gov", "key sec", "events 8",
+		"jitter 0.1", "zone sec", "host sec.gov *.sec.gov", "key sec", "events 8",
 		"window 1s", "@allowed host sec.gov *.sec.gov query.example.com",
 		"reverse_proxy @allowed {host}:443", "tls_server_name {host}",
-		"network_proxy none", "respond 403",
+		"header_down -Retry-After-Ms", "network_proxy none", "respond 403",
 	} {
 		if !strings.Contains(generated, expected) {
 			t.Errorf("generated Caddyfile does not contain %q", expected)

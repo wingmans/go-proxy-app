@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -82,12 +84,14 @@ func (t *RateLimitRetryTransport) RoundTrip(req *http.Request) (*http.Response, 
 			return nil, fmt.Errorf("%w (%d) exceeded for host %s", errMaxRateLimitRetries, maxRetries, req.URL.Host)
 		}
 
-		jitter, err := retryJitter()
-		if err != nil {
-			return nil, err
+		backoff, hasRetryHint := retryAfterDelay(resp.Header, time.Now())
+		if !hasRetryHint {
+			jitter, err := retryJitter()
+			if err != nil {
+				return nil, err
+			}
+			backoff = (1<<attempt)*baseDelay + jitter
 		}
-
-		backoff := (1<<attempt)*baseDelay + jitter
 
 		log.Warn("rate limited (429) encountered, applying backoff",
 			slog.String("host", req.URL.Host),
@@ -103,6 +107,29 @@ func (t *RateLimitRetryTransport) RoundTrip(req *http.Request) (*http.Response, 
 	}
 
 	return nil, errUnexpectedRetryExit
+}
+
+func retryAfterDelay(headers http.Header, now time.Time) (time.Duration, bool) {
+	if delay, ok := parseRetryDelay(headers.Get("Retry-After-Ms"), time.Millisecond); ok {
+		return delay, true
+	}
+
+	retryAfter := headers.Get("Retry-After")
+	if delay, ok := parseRetryDelay(retryAfter, time.Second); ok {
+		return delay, true
+	}
+	if retryAt, err := http.ParseTime(retryAfter); err == nil {
+		return max(0, retryAt.Sub(now)), true
+	}
+	return 0, false
+}
+
+func parseRetryDelay(value string, unit time.Duration) (time.Duration, bool) {
+	units, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || units > uint64(math.MaxInt64/unit) {
+		return 0, false
+	}
+	return time.Duration(units) * unit, true
 }
 
 func logMaxRetriesExceeded(log *slog.Logger, host string, maxRetries int) {

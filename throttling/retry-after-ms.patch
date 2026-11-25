@@ -1,0 +1,68 @@
+--- a/handler.go
++++ b/handler.go
+@@ -18,7 +18,7 @@
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+-	weakrand "math/rand"
++	"math/rand"
+ 	"net"
+ 	"net/http"
+ 	"sort"
+@@ -76,7 +76,6 @@
+
+ 	rateLimits []*RateLimit
+ 	storage    certmagic.Storage
+-	random     *weakrand.Rand
+ 	logger     *zap.Logger
+ 	ctx        caddy.Context
+ 	events     *caddyevents.App
+@@ -179,8 +178,6 @@
+
+ 	if h.Jitter < 0 {
+ 		return fmt.Errorf("jitter must be at least zero")
+-	} else if h.Jitter > 0 {
+-		h.random = weakrand.New(weakrand.NewSource(now().UnixNano()))
+ 	}
+
+ 	// clean up old rate limiters while handler is running
+@@ -291,15 +288,12 @@
+ }
+
+ func (h *Handler) rateLimitExceeded(w http.ResponseWriter, r *http.Request, repl *caddy.Replacer, zoneName string, key string, wait time.Duration) error {
+-	// add jitter, if configured
+-	if h.random != nil {
+-		jitter := h.randomFloatInRange(0, float64(wait)*h.Jitter)
+-		wait += time.Duration(jitter)
+-	}
+-
+-	// add 0.5 to ceil() instead of round() which FormatFloat() does automatically
+-	w.Header().Set("Retry-After", strconv.FormatFloat(wait.Seconds()+0.5, 'f', 0, 64))
+-
++	if h.Jitter > 0 {
++		wait += time.Duration(rand.Float64() * float64(wait) * h.Jitter)
++	}
++
++	w.Header().Set("Retry-After", formatRetryDelay(wait, time.Second))
++	w.Header().Set("Retry-After-Ms", formatRetryDelay(wait, time.Millisecond))
+ 	// emit log about exceeding rate limit (see #37)
+ 	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+ 	if err != nil {
+@@ -343,11 +337,12 @@
+ 	return nil
+ }
+
+-func (h Handler) randomFloatInRange(min, max float64) float64 {
+-	if h.random == nil {
+-		return 0
+-	}
+-	return min + h.random.Float64()*(max-min)
++func formatRetryDelay(wait, unit time.Duration) string {
++	units := wait / unit
++	if wait%unit > 0 {
++		units++
++	}
++	return strconv.FormatInt(int64(units), 10)
+ }
+
+ func (h Handler) sweepRateLimiters(ctx context.Context) {

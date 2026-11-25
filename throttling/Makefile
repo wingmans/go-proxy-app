@@ -5,8 +5,12 @@ ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 RULES_FILE ?= $(ROOT_DIR)/policies/example.rules
 CONFIG_NAME ?= default
 GENERATED_DIR := $(ROOT_DIR)/.generated
+ifeq ($(CONFIG_NAME),default)
+CADDYFILE := $(ROOT_DIR)/Caddyfile
+else
 CADDYFILE := $(GENERATED_DIR)/$(CONFIG_NAME).Caddyfile
-PROXY_IMAGE ?= go-proxy-app-throttling:0.1.0
+endif
+PROXY_IMAGE ?= go-proxy-app-throttling:0.2.0
 PROXY_PORT ?= 8090
 TEST_PORT ?= 18090
 TEST_PROJECT ?= go-proxy-app-throttling-test
@@ -43,7 +47,7 @@ require-rules:
 	}
 
 configure: require-rules
-	@mkdir -p "$(GENERATED_DIR)"
+	@mkdir -p "$(dir $(CADDYFILE))"
 	cd cmd/generate && go run . \
 		-rules "$(abspath $(RULES_FILE))" -out "$(CADDYFILE)"
 

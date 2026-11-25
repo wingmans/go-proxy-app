@@ -1,6 +1,6 @@
 services:
   caddy:
-    image: ${PROXY_IMAGE:-go-proxy-app-throttling:0.1.0}
+    image: ${PROXY_IMAGE:-go-proxy-app-throttling:0.2.0}
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,7 +13,7 @@ services:
     labels:
       app.proxy.policy-sha256: ${POLICY_HASH:-unconfigured}
     volumes:
-      - ${CADDYFILE_PATH:-./.generated/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 10s

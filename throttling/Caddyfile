@@ -1,0 +1,55 @@
+{
+	admin off
+}
+
+:8080 {
+	route {
+		@healthz path /healthz
+		log_skip @healthz
+		respond @healthz 200
+
+		basic_auth {
+			{$PROXY_USER:test-proxy-user} {$PROXY_HASH:$2a$14$D8kc7DkE2otVllA4EM0s0eQ2SvXy46nRCdkbjbCRnbDxxrQrT1nE2}
+		}
+
+		request_header -Authorization
+
+		rate_limit {
+			jitter 0.1
+			zone sec {
+				match {
+					host sec.gov *.sec.gov
+				}
+				key sec
+				events 3
+				window 1s
+			}
+			zone yahoo {
+				match {
+					host yahoo.com *.yahoo.com
+				}
+				key yahoo
+				events 5
+				window 1s
+			}
+		}
+
+		@allowed host sec.gov *.sec.gov yahoo.com *.yahoo.com
+		reverse_proxy @allowed {host}:443 {
+			header_up Host {host}
+			header_down -Retry-After-Ms
+			transport http {
+				network_proxy none
+				tls
+				tls_server_name {host}
+			}
+		}
+
+		respond 403
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

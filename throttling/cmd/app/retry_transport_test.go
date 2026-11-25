@@ -8,8 +8,62 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
+
+func TestRateLimitRetryTransport_RetryHints(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		milliseconds string
+		retryAfter   string
+		want         time.Duration
+	}{
+		{name: "milliseconds take precedence", milliseconds: "213", retryAfter: "1", want: 213 * time.Millisecond},
+		{name: "invalid milliseconds fall back to seconds", milliseconds: "-1", retryAfter: "2", want: 2 * time.Second},
+		{name: "overflowing milliseconds fall back to seconds", milliseconds: "9223372036854775807", retryAfter: "2", want: 2 * time.Second},
+		{name: "HTTP date", retryAfter: "Sat, 01 Jan 2000 00:00:03 GMT", want: 3 * time.Second},
+		{name: "past HTTP date", retryAfter: "Fri, 31 Dec 1999 23:59:59 GMT"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				start := time.Now()
+				attempts := 0
+				transport := &RateLimitRetryTransport{
+					BaseDelay: 10 * time.Second,
+					Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+						attempts++
+						resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: http.NoBody}
+						if attempts == 1 {
+							resp.StatusCode = http.StatusTooManyRequests
+							resp.Header.Set("Retry-After-Ms", test.milliseconds)
+							resp.Header.Set("Retry-After", test.retryAfter)
+						}
+						return resp, nil
+					}),
+				}
+				req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
+				resp, err := transport.RoundTrip(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer resp.Body.Close()
+				if attempts != 2 || resp.StatusCode != http.StatusOK {
+					t.Fatalf("got %d attempts and HTTP %d, want 2 attempts and HTTP 200", attempts, resp.StatusCode)
+				}
+				if elapsed := time.Since(start); elapsed != test.want {
+					t.Errorf("retried after %v, want %v", elapsed, test.want)
+				}
+			})
+		})
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestRateLimitRetryTransport_SuccessAfterRetry(t *testing.T) {
 	var attempts atomic.Int32
